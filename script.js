@@ -1,5 +1,20 @@
 const ASSET_PATH = "assets/";
 const ASSET_VERSION = "20260611-hongmen-v2";
+
+(function setupResponsiveScale() {
+  const BASE_W = 1100;
+  const BASE_H = 618.75;
+  function apply() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const scale = Math.min(vw / BASE_W, vh / BASE_H);
+    document.documentElement.style.setProperty("--game-scale", scale);
+  }
+  apply();
+  window.addEventListener("resize", apply);
+  window.addEventListener("orientationchange", apply);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", apply);
+})();
 const START_SCORE = 100;
 const OPTION_PENALTY = 30;
 const SEAT_PENALTY = 20;
