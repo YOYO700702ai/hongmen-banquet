@@ -4,33 +4,142 @@ const ASSET_VERSION = "20260611-hongmen-v2";
 (function setupResponsiveScale() {
   const BASE_W = 1100;
   const BASE_H = 618.75;
+  const root = document.documentElement;
+  const hint = document.getElementById("rotateHint");
+  let enteringLandscape = false;
+
+  function viewportSize() {
+    return {
+      width: (window.visualViewport && window.visualViewport.width) || window.innerWidth,
+      height: (window.visualViewport && window.visualViewport.height) || window.innerHeight
+    };
+  }
+
+  function isPortraitViewport() {
+    const { width, height } = viewportSize();
+    return height > width;
+  }
+
   function apply() {
     // visualViewport 才是手機實際可視區域（扣掉網址列等），innerWidth/Height 為後備
-    const vw = (window.visualViewport && window.visualViewport.width) || window.innerWidth;
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-    const scale = Math.min(vw / BASE_W, vh / BASE_H);
-    document.documentElement.style.setProperty("--game-scale", scale);
+    const { width: vw, height: vh } = viewportSize();
+    const forcedLandscape = root.classList.contains("forced-landscape");
+    const availableWidth = forcedLandscape ? vh : vw;
+    const availableHeight = forcedLandscape ? vw : vh;
+    const scale = Math.min(availableWidth / BASE_W, availableHeight / BASE_H);
+    root.style.setProperty("--viewport-width", `${vw}px`);
+    root.style.setProperty("--viewport-height", `${vh}px`);
+    root.style.setProperty("--game-scale", scale);
   }
+
+  function activateForcedLandscape() {
+    root.classList.add("forced-landscape");
+    hint?.classList.add("dismissed");
+    hint?.setAttribute("aria-hidden", "true");
+    hint?.blur();
+    apply();
+  }
+
+  function leaveForcedLandscapeIfNaturallyLandscape() {
+    if (!root.classList.contains("forced-landscape") || isPortraitViewport()) return;
+    root.classList.remove("forced-landscape");
+    hint?.classList.remove("dismissed");
+    hint?.removeAttribute("aria-hidden");
+    apply();
+  }
+
+  function waitForLandscape(timeout = 900) {
+    if (!isPortraitViewport()) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const check = () => {
+        if (!isPortraitViewport()) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - startedAt >= timeout) {
+          resolve(false);
+          return;
+        }
+        window.setTimeout(check, 60);
+      };
+      check();
+    });
+  }
+
+  async function enterLandscape() {
+    if (enteringLandscape) return;
+    enteringLandscape = true;
+
+    let nativeFlowAvailable = true;
+    const requestFullscreen = root.requestFullscreen || root.webkitRequestFullscreen;
+    const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+
+    if (!fullscreenElement) {
+      if (typeof requestFullscreen !== "function") {
+        nativeFlowAvailable = false;
+      } else {
+        try {
+          await requestFullscreen.call(root);
+        } catch (error) {
+          nativeFlowAvailable = false;
+        }
+      }
+    }
+
+    if (!screen.orientation || typeof screen.orientation.lock !== "function") {
+      nativeFlowAvailable = false;
+    } else {
+      try {
+        await screen.orientation.lock("landscape");
+      } catch (error) {
+        nativeFlowAvailable = false;
+      }
+    }
+
+    const becameLandscape = nativeFlowAvailable && await waitForLandscape();
+    if (!becameLandscape && isPortraitViewport()) {
+      activateForcedLandscape();
+    } else {
+      hint?.classList.remove("dismissed");
+      hint?.removeAttribute("aria-hidden");
+      apply();
+    }
+
+    enteringLandscape = false;
+  }
+
   apply();
-  window.addEventListener("resize", apply);
+  window.addEventListener("resize", () => {
+    leaveForcedLandscapeIfNaturallyLandscape();
+    apply();
+  });
   window.addEventListener("load", apply);
   // 轉向後手機網址列會重新伸縮，延遲多算幾次確保定位穩定
   window.addEventListener("orientationchange", () => {
+    leaveForcedLandscapeIfNaturallyLandscape();
     apply();
-    window.setTimeout(apply, 250);
-    window.setTimeout(apply, 600);
+    window.setTimeout(() => {
+      leaveForcedLandscapeIfNaturallyLandscape();
+      apply();
+    }, 250);
+    window.setTimeout(() => {
+      leaveForcedLandscapeIfNaturallyLandscape();
+      apply();
+    }, 600);
   });
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", apply);
     window.visualViewport.addEventListener("scroll", apply);
   }
-  // 旋轉提示：點擊即永久關閉（給無法/不想轉向的玩家）
-  const hint = document.getElementById("rotateHint");
+  // 使用者手勢先嘗試原生全螢幕與橫向鎖定；不支援時改用 CSS 旋轉備援。
   if (hint) {
-    const dismiss = () => hint.classList.add("dismissed");
-    hint.addEventListener("click", dismiss);
+    hint.addEventListener("click", enterLandscape);
     hint.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") dismiss();
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        enterLandscape();
+      }
     });
   }
 })();

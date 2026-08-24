@@ -38,7 +38,7 @@ body {
   font-feature-settings: "trad" 1;
 }
 
-/* 手機直向旋轉提示：橫向或桌機一律不顯示 */
+/* 手機直向進入橫向遊戲的入口；橫向或桌機一律不顯示 */
 .rotate-hint {
   display: none;
 }
@@ -59,6 +59,22 @@ body {
     display: none;
   }
 }
+
+/* iPhone 與不支援 Screen Orientation API 的瀏覽器備援。 */
+html.forced-landscape .rotate-hint {
+  display: none !important;
+}
+
+html.forced-landscape .page-shell {
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  width: var(--viewport-height, 100vh);
+  height: var(--viewport-width, 100vw);
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center center;
+}
+
 .rotate-hint-inner {
   max-width: 320px;
 }
